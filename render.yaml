@@ -1,21 +1,11 @@
 services:
   - type: web
-    name: joker-telegram-bot
+    name: telegram-card-bot
     env: python
-    plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: gunicorn --bind 0.0.0.0:10000 --workers 1 --timeout 120 main:app
+    startCommand: gunicorn --bind 0.0.0.0:10000 main:app
     envVars:
-      - key: BOT_TOKEN
-        sync: false
-      - key: WEBHOOK_URL
-        sync: false
       - key: PORT
-        value: "10000"
-      - key: ADMIN_ID
-        sync: false
-      - key: DEBUG
-        value: "false"
-    healthCheckPath: /health
-    regions:
-      - oregon
+        value: 10000
+      - key: PYTHON_VERSION
+        value: 3.11.0

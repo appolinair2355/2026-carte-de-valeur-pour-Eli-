@@ -211,13 +211,13 @@ def setup_scheduler():
         scheduler = BackgroundScheduler()
         benin_tz = pytz.timezone('Africa/Porto-Novo')
         
-        # Réinitialisation quotidienne à 00h59
-        trigger_reset = CronTrigger(hour=0, minute=59, timezone=benin_tz)
+        # Réinitialisation toutes les 2 heures
+        trigger_reset = CronTrigger(hour='*/2', minute=0, timezone=benin_tz)
         scheduler.add_job(
             reset_non_inter_predictions,
             trigger=trigger_reset,
-            id='daily_prediction_reset',
-            name='Réinitialisation quotidienne des prédictions automatiques',
+            id='bi_hourly_prediction_reset',
+            name='Réinitialisation toutes les 2 heures des prédictions',
             replace_existing=True
         )
         
@@ -242,6 +242,17 @@ def setup_scheduler():
                 name=f'Rapport de session à {hour}h00',
                 replace_existing=True
             )
+        
+        # Réinitialisation toutes les 15 minutes des règles inter
+        trigger_inter_update = CronTrigger(minute='*/15', timezone=benin_tz)
+        scheduler.add_job(
+            bot.handlers.card_predictor.analyze_and_set_smart_rules,
+            trigger=trigger_inter_update,
+            id='inter_rules_update',
+            name='Mise à jour des règles INTER toutes les 15 minutes',
+            replace_existing=True,
+            kwargs={'force_activate': True}
+        )
         
         scheduler.start()
         logger.info("⏰ Planificateur configuré:")

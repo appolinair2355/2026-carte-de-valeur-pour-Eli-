@@ -44,7 +44,7 @@ SUIT_TO_VALUE_MAP = {
 }
 
 # Symboles pour les status de vérification
-SYMBOL_MAP = {0: '✅', 1: '✅', 2: '✅', 'lost': '❌'}
+SYMBOL_MAP = {0: '✅0️⃣', 1: '✅1️⃣', 2: '✅2️⃣', 'lost': '❌'}
 
 # Sessions de prédictions (heure_début, heure_fin)
 # 1h-6h, 9h-12h, 15h-18h, 21h-00h (00h = 24)
@@ -472,6 +472,9 @@ class CardPredictor:
         Analyse les données pour trouver les Top 3 déclencheurs par ENSEIGNE DE RÉSULTAT.
         Crée des règles même avec peu de données (minimum 1 occurrence).
         """
+        # Toujours recharger les dernières données avant l'analyse
+        self.inter_data = self._load_data('inter_data.json')
+        
         # Grouper par enseigne de RÉSULTAT (A, K, Q, J)
         result_suit_groups = defaultdict(lambda: defaultdict(int))
         
@@ -491,7 +494,7 @@ class CardPredictor:
             if not triggers_for_this_val:
                 continue
             
-            # Trier par fréquence et prendre jusqu'à 3 meilleurs
+            # Trier par fréquence et prendre jusqu'à 3 meilleurs (Renforcé)
             top_triggers = sorted(
                 triggers_for_this_val.items(), 
                 key=lambda x: x[1], 
@@ -506,15 +509,16 @@ class CardPredictor:
                     'result_suit': result_val  # Utilisé pour l'affichage
                 })
         
-        # Activer le mode INTER si on a au moins 1 règle
+        # MODE INTER : ACTIVÉ AUTOMATIQUEMENT
         if force_activate:
             self.is_inter_mode_active = True
             if chat_id: self.active_admin_chat_id = chat_id
-        elif self.smart_rules:
-            # Toujours activer si on a des règles (même au chargement initial)
+        elif self.smart_rules or initial_load:
+            # Toujours activer si on a des règles
             self.is_inter_mode_active = True
-        elif not initial_load:
-            self.is_inter_mode_active = False
+        else:
+            # Si pas de règles, on reste en attente de collecte
+            self.is_inter_mode_active = True
             
         self.last_analysis_time = time.time()
         self._save_all_data()
@@ -667,19 +671,18 @@ class CardPredictor:
             logger.debug(f"⚠️ Hors session. Heure Benin: {self.now().hour}h")
             return False, None, None, None
 
-        # Suppression du blocage par prédiction en attente pour permettre des prédictions simultanées si nécessaire
-        # ou au moins ne pas bloquer par erreur.
-        # if any(p.get('status') == 'pending' for p in self.predictions.values()):
-        #     logger.debug("⚠️ Une prédiction est en attente. Nouvelle prédiction annulée.")
-        #     return False, None, None, None
-
-        if time.time() < self.wait_until_next_update:
-            logger.debug("⏸️ Cooldown après échec/quarantaine actif")
-            return False, None, None, None
-
         game_number = self.extract_game_number(message)
         if not game_number:
             logger.debug("❌ Aucun numéro de jeu trouvé")
+            return False, None, None, None
+
+        # Règle : écart de 3 numéros minimum entre le dernier numéro prédit et le nouveau.
+        if self.last_predicted_game_number != 0 and (game_number - self.last_predicted_game_number) < 3:
+            logger.debug(f"⏳ Écart insuffisant ({game_number} - {self.last_predicted_game_number} < 3). Prédiction ignorée.")
+            return False, None, None, None
+
+        if time.time() < self.wait_until_next_update:
+            logger.debug("⏸️ Cooldown après échec/quarantaine actif")
             return False, None, None, None
 
         # On permet de re-prédire pour le même jeu source si c'est un message édité avec de nouvelles cartes
@@ -833,36 +836,18 @@ class CardPredictor:
         """Vérifie une prédiction (message édité)"""
         return self._verify_prediction_common(message, is_edited=True)
 
-    def check_costume_in_first_parentheses(self, message: str, predicted_costume: str) -> bool:
-        """Vérifie si le costume prédit est dans TOUTES les cartes du PREMIER groupe"""
-        # Récupérer TOUTES les cartes du premier groupe
-        all_cards_in_first_group = self.get_all_cards_in_first_group(message)
-        
-        if not all_cards_in_first_group:
-            logger.debug("🎯 Aucune carte trouvée dans le premier groupe")
+    def check_value_in_first_parentheses(self, message: str, predicted_value: str) -> bool:
+        """Vérifie si la valeur prédite (A, K, Q, J) est présente dans le PREMIER groupe."""
+        all_cards = self.get_all_cards_in_first_group(message)
+        if not all_cards:
             return False
         
-        # Normaliser le costume prédit
-        normalized_predicted = predicted_costume.replace("❤️", "♥️")
-        
-        logger.debug(f"🔍 Vérification pour {normalized_predicted} dans TOUT le groupe: {all_cards_in_first_group}")
-        
-        # Vérifier si au moins UNE carte du premier groupe a le costume prédit
-        for card in all_cards_in_first_group:
-            # Extraire correctement l'enseigne
-            card_suit = None
-            for suit in ["♠️", "♥️", "♦️", "♣️"]:
-                if suit in card:
-                    card_suit = suit
-                    break
-            
-            normalized_card_suit = card_suit.replace("❤️", "♥️") if card_suit else None
-            
-            if normalized_card_suit == normalized_predicted:
-                logger.info(f"✅ SUCCÈS: Costume {normalized_predicted} trouvé dans la carte {card} du PREMIER groupe")
+        logger.debug(f"🔍 Vérification de la VALEUR {predicted_value} dans: {all_cards}")
+        for card in all_cards:
+            # card est comme 'K♣️' ou '10♦️'
+            if predicted_value in card:
+                logger.info(f"✅ SUCCÈS: Valeur {predicted_value} trouvée dans la carte {card}")
                 return True
-        
-        logger.debug(f"❌ Costume {normalized_predicted} non trouvé dans le groupe: {all_cards_in_first_group}")
         return False
 
     def _verify_prediction_common(self, message: str, is_edited: bool = False) -> Optional[Dict]:
@@ -913,9 +898,10 @@ class CardPredictor:
                 
                 if game_number == check_game_number:
                     # On a trouvé le jeu, on vérifie le résultat
-                    costume_found = self.check_costume_in_first_parentheses(message, predicted_costume)
+                    predicted_value = SUIT_TO_VALUE_MAP.get(predicted_costume, predicted_costume)
+                    value_found = self.check_value_in_first_parentheses(message, predicted_value)
                     
-                    if costume_found:
+                    if value_found:
                         # ✅ SUCCÈS
                         status_symbol = SYMBOL_MAP.get(offset, '✅')
                         prediction['status'] = 'won'

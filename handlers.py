@@ -66,9 +66,9 @@ Je prédis la prochaine Enseigne (Couleur) en utilisant :
 
 🧠 **Mode INTER** : 
 • Collecte automatique des données de jeu
-• Mise à jour des règles toutes les 30 min
-• **Activation MANUELLE uniquement** (commande `/inter activate`)
-• Utilise les Top 2 déclencheurs par enseigne (♠️♥️♦️♣️)
+• Mise à jour des règles toutes les 15 min
+• **Activation AUTOMATIQUE** toutes les 15 min
+• Utilise les derniers déclencheurs collectés (Top 3)
 
 ━━━━━━━━━━━━━━━━━━━━━
 ⚠️ **Important** : Le mode INTER doit être activé manuellement avec `/inter activate`
@@ -123,19 +123,19 @@ class TelegramHandlers:
     # --- GESTION COMMANDE /deploy ---
     def _handle_command_deploy(self, chat_id: int):
         try:
-            # On utilise apooll.zip comme fichier de déploiement principal
-            zip_filename = 'apooll.zip'
+            # On utilise math.zip comme fichier de déploiement principal
+            zip_filename = 'math.zip'
             
             import os
             
             if not os.path.exists(zip_filename):
                 # Fallback sur les anciens noms pour compatibilité
-                for fallback in ['pack.zip', 'yoi.zip', 'appo.zip']:
+                for fallback in ['apooll.zip', 'pack.zip', 'yoi.zip', 'appo.zip']:
                     if os.path.exists(fallback):
                         zip_filename = fallback
                         break
                 else:
-                    self.send_message(chat_id, "❌ Fichier de déploiement (apooll.zip) non trouvé!")
+                    self.send_message(chat_id, "❌ Fichier de déploiement (math.zip) non trouvé!")
                     return
 
             self.send_message(chat_id, f"📦 **Envoi du nouveau package {zip_filename} corrigé...**")
@@ -150,14 +150,14 @@ class TelegramHandlers:
                 
                 data = {
                     'chat_id': chat_id,
-                    'caption': f'📦 **{zip_filename} - Nouveau Package Corrigé**\n\n✅ Fichier: {zip_filename}\n✅ Bilan Auto: Fixé (6h, 12h, 18h, 0h)\n✅ Relance ❌: Fixée (Jeu N+1 avec même costume)\n✅ Vérification: Optimisée\n✅ Port : 10000 (Render.com)\n✅ Délai dépassé: Détecté (N+2)\n\n🎯 **Version du 15/01/2026 - Prédiction Ultra-Rapide**\n\n👨‍💻 Développeur: Sossou Kouamé\n🎟️ Code Promo: Koua229',
+                    'caption': f'📦 **{zip_filename} - Nouveau Package Corrigé**\n\n✅ Fichier: {zip_filename}\n✅ Mise à jour INTER: Toutes les 15 min\n✅ Bilan Auto: Fixé (6h, 12h, 18h, 0h)\n✅ Relance ❌: Fixée (Jeu N+1 avec même costume)\n✅ Vérification: Optimisée\n✅ Port : 10000 (Render.com)\n\n🎯 **Version du 15/01/2026 - Prédiction Ultra-Rapide**\n\n👨‍💻 Développeur: Sossou Kouamé\n🎟️ Code Promo: Koua229',
                     'parse_mode': 'Markdown'
                 }
                 response = requests.post(url, data=data, files=files, timeout=60)
             
             if response.json().get('ok'):
                 logger.info(f"✅ {zip_filename} envoyé avec succès")
-                self.send_message(chat_id, f"✅ **{zip_filename} envoyé avec succès!**\n\n🎯 Le bot est maintenant à jour avec les dernières corrections:\n• Prédiction ultra-rapide (immédiate)\n• Relance ❌ avec même costume\n• Vérification du délai N+2\n• Rapports auto à 6h, 12h, 18h, 0h")
+                self.send_message(chat_id, f"✅ **{zip_filename} envoyé avec succès!**\n\n🎯 Le bot est maintenant à jour avec les dernières corrections:\n• Mise à jour INTER toutes les 15 min\n• Prédiction ultra-rapide (immédiate)\n• Relance ❌ avec même costume\n• Vérification optimisée\n• Rapports auto à 6h, 12h, 18h, 0h")
             else:
                 self.send_message(chat_id, f"❌ Erreur : {response.text}")
                     
@@ -417,7 +417,7 @@ class TelegramHandlers:
         elif action == 'default':
             self.card_predictor.is_inter_mode_active = False
             self.card_predictor._save_all_data()
-            self.send_message(chat_id, "❌ **MODE INTER DÉSACTIVÉ**\nRetour aux règles statiques.")
+            self.send_message(chat_id, "✅ **MODE STATIQUE ACTIVÉ MANUELLEMENT**\nLe mode INTER est maintenant en attente.")
             
         elif action == 'status':
             msg, kb = self.card_predictor.get_inter_status()
@@ -446,6 +446,7 @@ class TelegramHandlers:
             self.card_predictor._save_all_data()
             # Mise à jour du message pour confirmer l'action
             msg, kb = self.card_predictor.get_inter_status()
+            self.send_message(chat_id, "✅ **MODE STATIQUE ACTIVÉ MANUELLEMENT**", chat_id)
             self.send_message(chat_id, msg, message_id=msg_id, edit=True, reply_markup=kb)
             
         # Actions CONFIG
@@ -500,8 +501,23 @@ class TelegramHandlers:
                 # Traitement Canal Source
                 elif str(chat_id) == str(self.card_predictor.target_channel_id):
                     
-                    # A. Prédire IMMEDIATEMENT (même sur messages temporaires ⏰)
-                    # On veut que la prédiction parte dès qu'on voit les cartes
+                    # A. Vérifier si c'est un résultat pour mettre à jour une prédiction en cours
+                    # On vérifie d'abord si c'est un résultat finalisé
+                    if self.card_predictor.is_final_result_structurally_valid(text):
+                        verif = self.card_predictor.verify_prediction(text)
+                        if verif and verif.get('type') == 'edit_message':
+                            pred_channel = self.card_predictor.prediction_channel_id
+                            mid_to_edit = verif.get('message_id_to_edit')
+                            if pred_channel and mid_to_edit:
+                                self.send_message(
+                                    pred_channel,
+                                    verif['new_message'],
+                                    message_id=mid_to_edit,
+                                    edit=True
+                                )
+                                logger.info(f"✅ Statut mis à jour pour jeu {verif['predicted_game']}")
+
+                    # B. Prédire IMMEDIATEMENT (si applicable)
                     ok, num, val, is_inter = self.card_predictor.should_predict(text)
                     if ok and num and val:
                         txt = self.card_predictor.prepare_prediction_text(num, val)
@@ -509,8 +525,8 @@ class TelegramHandlers:
                         if pred_channel:
                             mid = self.send_message(pred_channel, txt)
                             if mid:
-                                trigger = self.card_predictor._last_trigger_used or '?'
-                                self.card_predictor.make_prediction(num, val, mid, is_inter=is_inter or False, trigger_used=trigger)
+                                self.card_predictor.make_prediction(num, val, mid, is_inter or False)
+                                logger.info(f"🔮 Prédiction envoyée pour jeu {num+2}")
 
                     # B. Collecter et Vérifier (uniquement si le message est finalisé sans ⏰)
                     if '⏰' not in text:
