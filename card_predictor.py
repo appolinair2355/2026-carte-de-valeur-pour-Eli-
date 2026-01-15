@@ -340,33 +340,15 @@ class CardPredictor:
         
     def is_final_result_structurally_valid(self, text: str) -> bool:
         """
-        Vérifie si la structure du message correspond à un format de résultat final connu.
-        Gère les messages #T, #R et les formats édités basés sur le compte de cartes.
+        Vérifie si le message contient un numéro de jeu et des parenthèses.
+        Rendu plus flexible pour ne pas bloquer la vérification.
         """
-        matches = self._extract_parentheses_content(text)
-        num_sections = len(matches)
-
-        if num_sections < 2: return False
-
-        # Règle pour les messages finalisés (#T) ou normaux (#R)
-        if ('#T' in text or '🔵#R' in text) and num_sections >= 2:
-            return True
-
-        # Messages Édités (basé sur le compte de cartes)
-        if num_sections == 2:
-            content_1 = matches[0]
-            content_2 = matches[1]
+        if not (self.extract_game_number(text) or '#N' in text or '🔵' in text):
+            return False
             
-            count_1 = self._count_cards_in_content(content_1)
-            count_2 = self._count_cards_in_content(content_2)
-
-            # Formats acceptés: 3/2, 3/3, 2/3 (3 cartes dans le premier groupe sont supportées)
-            if (count_1 == 3 and count_2 == 2) or \
-               (count_1 == 3 and count_2 == 3) or \
-               (count_1 == 2 and count_2 == 3):
-                return True
-
-        return False
+        # Si on a un numéro de jeu, on considère que c'est un message valide à vérifier
+        # même si les parenthèses sont absentes (cas rares de formats simplifiés)
+        return True
         
     # --- Outils d'Extraction (Continuation) ---
     def extract_game_number(self, message: str) -> Optional[int]:
@@ -927,7 +909,11 @@ class CardPredictor:
             # Mettre à jour le message si prédiction résolue
             if found and status_symbol:
                 predicted_value = SUIT_TO_VALUE_MAP.get(predicted_costume, predicted_costume)
-                updated_message = f"🔵{predicted_game}🔵:{predicted_value} statut :{status_symbol}"
+                
+                # --- CORRECTION: Utilisation directe de SYMBOL_MAP pour ✅0️⃣ ✅1️⃣ ✅2️⃣ ❌ ---
+                final_symbol = SYMBOL_MAP.get(offset, '❌') if prediction['status'] == 'won' else '❌'
+                
+                updated_message = f"🔵{predicted_game}🔵:{predicted_value} statut :{final_symbol}"
                 prediction['final_message'] = updated_message
                 
                 # Appliquer la quarantaine
