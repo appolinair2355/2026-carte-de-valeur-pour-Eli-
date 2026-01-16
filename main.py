@@ -100,6 +100,57 @@ def setup_webhook():
 
 # --- RÉINITIALISATION PROGRAMMÉE DES PRÉDICTIONS ---
 
+def reset_every_5_hours():
+    """
+    Réinitialisation toutes les 5 heures:
+    - Efface les collectes, les règles INTER et les prédictions automatiques
+    - Ne touche pas aux bilans et aux canaux configurés
+    """
+    try:
+        files_to_clear = [
+            'predictions.json',
+            'inter_data.json',
+            'smart_rules.json',
+            'collected_games.json',
+            'sequential_history.json',
+            'pending_edits.json',
+            'quarantined_rules.json',
+            'last_prediction_time.json',
+            'last_predicted_game_number.json',
+            'consecutive_fails.json',
+            'single_trigger_until.json',
+            'last_analysis_time.json',
+            'last_inter_update.json',
+            'wait_until_next_update.json'
+        ]
+        
+        for file in files_to_clear:
+            if os.path.exists(file):
+                os.remove(file)
+                logger.info(f"🗑️ [5h Reset] Supprimé: {file}")
+        
+        if bot.handlers.card_predictor:
+            predictor = bot.handlers.card_predictor
+            predictor.predictions = {}
+            predictor.inter_data = []
+            predictor.smart_rules = []
+            predictor.collected_games = set()
+            predictor.sequential_history = {}
+            predictor.pending_edits = {}
+            predictor.quarantined_rules = {}
+            predictor.last_prediction_time = 0
+            predictor.last_predicted_game_number = 0
+            predictor.consecutive_fails = 0
+            predictor.single_trigger_until = 0
+            predictor.last_analysis_time = 0
+            predictor.last_inter_update_time = 0
+            predictor.wait_until_next_update = 0
+            predictor.is_inter_mode_active = True
+            predictor._save_all_data()
+            logger.info("🔄 RESET PARTIEL EFFECTUÉ (Collectes, Règles, Prédictions effacées)")
+    except Exception as e:
+        logger.error(f"❌ Erreur lors du reset 5h: {e}")
+
 def reset_non_inter_predictions():
     """
     Reset complet à 00h59 heure du Bénin:
@@ -211,13 +262,23 @@ def setup_scheduler():
         scheduler = BackgroundScheduler()
         benin_tz = pytz.timezone('Africa/Porto-Novo')
         
-        # Réinitialisation toutes les 2 heures
-        trigger_reset = CronTrigger(hour='*/2', minute=0, timezone=benin_tz)
+        # Réinitialisation toutes les 5 heures
+        trigger_reset_5h = CronTrigger(hour='*/5', minute=0, timezone=benin_tz)
+        scheduler.add_job(
+            reset_every_5_hours,
+            trigger=trigger_reset_5h,
+            id='five_hourly_reset',
+            name='Réinitialisation toutes les 5 heures',
+            replace_existing=True
+        )
+
+        # Réinitialisation complète à 00h59
+        trigger_reset_full = CronTrigger(hour=0, minute=59, timezone=benin_tz)
         scheduler.add_job(
             reset_non_inter_predictions,
-            trigger=trigger_reset,
-            id='bi_hourly_prediction_reset',
-            name='Réinitialisation toutes les 2 heures des prédictions',
+            trigger=trigger_reset_full,
+            id='daily_full_reset',
+            name='Réinitialisation complète à 00h59',
             replace_existing=True
         )
         
@@ -271,11 +332,7 @@ scheduler = setup_scheduler()
 
 if __name__ == '__main__':
     # Get port from environment (10000 pour Render.com, 5000 pour Replit)
-    port = config.PORT
-    
-    # Override pour Render.com si nécessaire
-    if os.getenv('RENDER'):
-        port = int(os.getenv('PORT', 10000))
+    port = int(os.getenv('PORT', 10000))
     
     # Run the Flask app
     app.run(host='0.0.0.0', port=port, debug=config.DEBUG)

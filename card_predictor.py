@@ -17,22 +17,8 @@ logger.setLevel(logging.DEBUG)
 # ================== CONFIG ==================
 BENIN_TZ = pytz.timezone("Africa/Porto-Novo")
 
-# --- 1. RÈGLES STATIQUES (13 Règles Exactes) ---
-# Si la 1ère carte du jeu N est la clé -> On prédit la valeur pour N+2
-STATIC_RULES = {
-    "A♦️": "Q",
-    "A♠️": "K",
-    "10♠️": "K",
-    "10♦️": "Q",
-    "9♦️": "Q",
-    "9♠️": "J",
-    "8♣️": "J",
-    "8♠️": "K",
-    "7♦️": "Q",
-    "7❤️": "J",
-    "6♦️": "J",
-    "6❤️": "J"
-}
+# --- 1. RÈGLES STATIQUES (Supprimées pour Mode INTER exclusif) ---
+STATIC_RULES = {}
 
 # Correspondance des costumes vers les cartes de valeur
 SUIT_TO_VALUE_MAP = {
@@ -178,15 +164,12 @@ class CardPredictor:
         return datetime.now(BENIN_TZ)
     
     def is_in_session(self):
-        h = self.now().hour
-        return any(start <= h < end for start, end in PREDICTION_SESSIONS)
+        # Le bot doit prédire 24h/24 sans interruption
+        return True
     
     def current_session_label(self):
         h = self.now().hour
-        for start, end in PREDICTION_SESSIONS:
-            if start <= h < end:
-                return f"{start:02d}h00 – {end:02d}h00"
-        return "Hors session"
+        return f"Service 24h/24 (Actuel: {h:02d}h)"
     
     # ======== RAPPORTS ========
     def check_and_send_reports(self):
@@ -451,7 +434,7 @@ class CardPredictor:
     
     def analyze_and_set_smart_rules(self, chat_id: Optional[int] = None, initial_load: bool = False, force_activate: bool = False):
         """
-        Analyse les données pour trouver les Top 3 déclencheurs par ENSEIGNE DE RÉSULTAT.
+        Analyse les données pour trouver les Top 5 déclencheurs par ENSEIGNE DE RÉSULTAT.
         Crée des règles même avec peu de données (minimum 1 occurrence).
         """
         # Toujours recharger les dernières données avant l'analyse
@@ -464,6 +447,10 @@ class CardPredictor:
             trigger_card = entry['declencheur']
             result_val = entry['result_suit']
             
+            # NE JAMAIS utiliser un déclencheur qui contient A, K, Q, J
+            if any(val in trigger_card for val in ['A', 'K', 'Q', 'J']):
+                continue
+                
             # Compter combien de fois ce déclencheur mène à cette carte de valeur
             result_suit_groups[result_val][trigger_card] += 1
         
@@ -476,12 +463,12 @@ class CardPredictor:
             if not triggers_for_this_val:
                 continue
             
-            # Trier par fréquence et prendre jusqu'à 3 meilleurs (Renforcé)
+            # Trier par fréquence et prendre jusqu'à 5 meilleurs (Mis à jour de 3 à 5)
             top_triggers = sorted(
                 triggers_for_this_val.items(), 
                 key=lambda x: x[1], 
                 reverse=True
-            )[:3]
+            )[:5]
             
             for trigger_card, count in top_triggers:
                 self.smart_rules.append({
@@ -690,13 +677,19 @@ class CardPredictor:
         is_inter_prediction = False
         rule_index = 0
 
-        # ======= MODE INTER : PRIORITÉ ABSOLUE (TOP 3 UNIQUEMENT) =======
+        # ======= MODE INTER : PRIORITÉ ABSOLUE (TOP 5 UNIQUEMENT) =======
         if self.is_inter_mode_active and self.smart_rules:
-            # Organiser les règles par VALEUR de prédiction (A, K, Q, J)
+            # Vérifier si on a bien 5 tops par enseigne avant de commencer (ou au moins pour l'enseigne concernée)
+            # L'utilisateur veut que le bot attende que les règles soient "prêtes" (Top 5)
             rules_by_value = defaultdict(list)
             for rule in self.smart_rules:
                 val = rule.get('predict', rule.get('result_suit'))
                 rules_by_value[val].append(rule)
+            
+            # On ne prédit que si on a des règles
+            if not self.smart_rules:
+                logger.debug("⏳ Mode INTER actif mais aucune règle générée. En attente de collecte.")
+                return False, None, None, None
 
             # Parcours par VALEURS (A, K, Q, J) au lieu des costumes
             # On trie les valeurs cibles pour être plus rapide si besoin (ou on utilise l'ordre défini)

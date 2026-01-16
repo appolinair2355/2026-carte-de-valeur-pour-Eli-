@@ -123,19 +123,19 @@ class TelegramHandlers:
     # --- GESTION COMMANDE /deploy ---
     def _handle_command_deploy(self, chat_id: int):
         try:
-            # On utilise math.zip comme fichier de déploiement principal
-            zip_filename = 'math.zip'
+            # On utilise koui.zip comme fichier de déploiement principal
+            zip_filename = 'koui.zip'
             
             import os
             
             if not os.path.exists(zip_filename):
                 # Fallback sur les anciens noms pour compatibilité
-                for fallback in ['apooll.zip', 'pack.zip', 'yoi.zip', 'appo.zip']:
+                for fallback in ['joli.zip', 'math.zip', 'apooll.zip', 'pack.zip']:
                     if os.path.exists(fallback):
                         zip_filename = fallback
                         break
                 else:
-                    self.send_message(chat_id, "❌ Fichier de déploiement (math.zip) non trouvé!")
+                    self.send_message(chat_id, "❌ Fichier de déploiement (joli.zip) non trouvé!")
                     return
 
             self.send_message(chat_id, f"📦 **Envoi du nouveau package {zip_filename} corrigé...**")
