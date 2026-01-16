@@ -223,7 +223,7 @@ def reset_non_inter_predictions():
         logger.error(f"❌ Erreur lors du reset complet: {e}")
 
 def send_startup_message():
-    """Envoie un message de démarrage de session avec la dernière mise à jour INTER."""
+    """Envoie un message de démarrage avec la dernière mise à jour INTER."""
     try:
         if bot.handlers.card_predictor:
             predictor = bot.handlers.card_predictor
@@ -232,19 +232,16 @@ def send_startup_message():
             
             now = predictor.now()
             last_update = predictor.get_inter_version()
-            session_label = predictor.current_session_label()
-            inter_active = "✅ ACTIF" if predictor.is_inter_mode_active else "❌ INACTIF"
             
-            msg = (f"🎬 **LES PRÉDICTIONS REPRENNENT !**\n\n"
+            msg = (f"🎬 **LE BOT EST PRÊT !**\n\n"
                    f"⏰ Heure de Bénin : {now.strftime('%H:%M:%S - %d/%m/%Y')}\n"
-                   f"📅 Session : {session_label}\n"
-                   f"🧠 Mode Intelligent : {inter_active}\n"
+                   f"🧠 Mode Intelligent : ✅ ACTIF (Exclusif)\n"
                    f"🔄 Mise à jour des règles : {last_update}\n\n"
                    f"👨‍💻 **Développeur** : Sossou Kouamé\n"
                    f"🎟️ **Code Promo** : Koua229")
             
             predictor.telegram_message_sender(predictor.prediction_channel_id, msg)
-            logger.info("📢 Message de démarrage de session envoyé")
+            logger.info("📢 Message de démarrage envoyé")
     except Exception as e:
         logger.error(f"❌ Erreur envoi message démarrage: {e}")
 
@@ -306,14 +303,15 @@ def setup_scheduler():
         
         # Réinitialisation toutes les 15 minutes des règles inter
         trigger_inter_update = CronTrigger(minute='*/15', timezone=benin_tz)
-        scheduler.add_job(
-            bot.handlers.card_predictor.analyze_and_set_smart_rules,
-            trigger=trigger_inter_update,
-            id='inter_rules_update',
-            name='Mise à jour des règles INTER toutes les 15 minutes',
-            replace_existing=True,
-            kwargs={'force_activate': True}
-        )
+        if bot.handlers.card_predictor:
+            scheduler.add_job(
+                bot.handlers.card_predictor.analyze_and_set_smart_rules,
+                trigger=trigger_inter_update,
+                id='inter_rules_update',
+                name='Mise à jour des règles INTER toutes les 15 minutes',
+                replace_existing=True,
+                kwargs={'force_activate': True}
+            )
         
         scheduler.start()
         logger.info("⏰ Planificateur configuré:")

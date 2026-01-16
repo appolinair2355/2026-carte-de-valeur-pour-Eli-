@@ -25,9 +25,8 @@ user_message_counts = defaultdict(list)
 WELCOME_MESSAGE = """
 👋 **BIENVENUE SUR LE BOT ENSEIGNE !** ♠️♥️♦️♣️
 
-Je prédis la prochaine Enseigne (Couleur) en utilisant :
-1. **Règles statiques** : Patterns prédéfinis (ex: 10♦️ → ♠️)
-2. **Intelligence artificielle (Mode INTER)** : Apprend des données réelles
+Je prédis la prochaine Enseigne (Couleur) en utilisant uniquement :
+1. **Intelligence artificielle (Mode INTER)** : Apprend des données réelles et utilise le Top 5 des déclencheurs.
 
 ━━━━━━━━━━━━━━━━━━━━━
 📋 **COMMANDES DISPONIBLES**
@@ -35,22 +34,21 @@ Je prédis la prochaine Enseigne (Couleur) en utilisant :
 
 **🔹 Informations Générales**
 • `/start` - Afficher ce message d'aide
-• `/stat` - Voir l'état du bot (canaux, mode actif)
+• `/stat` - Voir l'état du bot (canaux)
 
 **🔹 Mode Intelligent (INTER)**
-• `/inter status` - Voir les règles apprises (Top 2 par enseigne)
-• `/inter activate` - **Activer manuellement** le mode intelligent
-• `/inter default` - Désactiver et revenir aux règles statiques
+• `/inter status` - Voir les règles apprises (Top 5 par enseigne)
+• `/inter activate` - Relancer l'analyse des données
 
 **🔹 Collecte de Données**
 • `/collect` - Voir toutes les données collectées par enseigne
-• `/reset` - Réinitialiser les prédictions automatiques (garde INTER/Collect)
+• `/reset` - Réinitialiser les prédictions automatiques
 
 **🔹 Configuration**
 • `/config` - Configurer les rôles des canaux (Source/Prédiction)
 
 **🔹 Déploiement & Maintenance**
-• `/deploy` - Télécharger le package pour Render.com
+• `/deploy` - Télécharger le package lego.zip
 • `/qua` - État de la quarantaine et statistiques
 • `/reset` - ⚠️ Réinitialiser COMPLÈTEMENT le bot
 
@@ -59,7 +57,7 @@ Je prédis la prochaine Enseigne (Couleur) en utilisant :
 ━━━━━━━━━━━━━━━━━━━━━
 
 1️⃣ Le bot surveille le canal SOURCE
-2️⃣ Détecte les cartes et fait des prédictions
+2️⃣ Détecte les cartes et fait des prédictions via le mode INTER
 3️⃣ Envoie les prédictions dans le canal PRÉDICTION
 4️⃣ Vérifie automatiquement les résultats
 5️⃣ Collecte les données en continu pour apprentissage
@@ -67,19 +65,17 @@ Je prédis la prochaine Enseigne (Couleur) en utilisant :
 🧠 **Mode INTER** : 
 • Collecte automatique des données de jeu
 • Mise à jour des règles toutes les 15 min
-• **Activation AUTOMATIQUE** toutes les 15 min
-• Utilise les derniers déclencheurs collectés (Top 3)
+• Utilise les meilleurs déclencheurs (Top 5)
+• Filtre automatique des déclencheurs (Pas de A, K, Q, J)
 
 ━━━━━━━━━━━━━━━━━━━━━
-⚠️ **Important** : Le mode INTER doit être activé manuellement avec `/inter activate`
 """
 
 HELP_MESSAGE = """
 🤖 **AIDE COMMANDE /INTER**
 
-• `/inter status` : Voir les règles apprises (Top 2 par Enseigne).
-• `/inter activate` : Forcer l'activation de l'IA et relancer l'analyse.
-• `/inter default` : Revenir aux règles statiques.
+• `/inter status` : Voir les règles apprises (Top 5 par Enseigne).
+• `/inter activate` : Relancer l'analyse.
 """
 
 class TelegramHandlers:
@@ -123,41 +119,32 @@ class TelegramHandlers:
     # --- GESTION COMMANDE /deploy ---
     def _handle_command_deploy(self, chat_id: int):
         try:
-            # On utilise koui.zip comme fichier de déploiement principal
-            zip_filename = 'koui.zip'
+            # On utilise lego.zip comme fichier de déploiement principal
+            zip_filename = 'lego.zip'
             
             import os
             
             if not os.path.exists(zip_filename):
-                # Fallback sur les anciens noms pour compatibilité
-                for fallback in ['joli.zip', 'math.zip', 'apooll.zip', 'pack.zip']:
-                    if os.path.exists(fallback):
-                        zip_filename = fallback
-                        break
-                else:
-                    self.send_message(chat_id, "❌ Fichier de déploiement (joli.zip) non trouvé!")
-                    return
+                self.send_message(chat_id, f"❌ Fichier de déploiement ({zip_filename}) non trouvé!")
+                return
 
-            self.send_message(chat_id, f"📦 **Envoi du nouveau package {zip_filename} corrigé...**")
+            self.send_message(chat_id, f"📦 **Envoi du nouveau package {zip_filename}...**")
             
             # Envoyer le fichier
             url = f"{self.base_url}/sendDocument"
             with open(zip_filename, 'rb') as f:
                 files = {'document': (zip_filename, f, 'application/zip')}
-                # Compter les données collectées
-                data_count = len(self.card_predictor.inter_data) if self.card_predictor else 0
-                rules_count = len(self.card_predictor.smart_rules) if self.card_predictor else 0
                 
                 data = {
                     'chat_id': chat_id,
-                    'caption': f'📦 **{zip_filename} - Nouveau Package Corrigé**\n\n✅ Fichier: {zip_filename}\n✅ Mise à jour INTER: Toutes les 15 min\n✅ Bilan Auto: Fixé (6h, 12h, 18h, 0h)\n✅ Relance ❌: Fixée (Jeu N+1 avec même costume)\n✅ Vérification: Optimisée\n✅ Port : 10000 (Render.com)\n\n🎯 **Version du 15/01/2026 - Prédiction Ultra-Rapide**\n\n👨‍💻 Développeur: Sossou Kouamé\n🎟️ Code Promo: Koua229',
+                    'caption': f'📦 **{zip_filename} - Package LEGO**\n\n✅ Mode: INTER Exclusif\n✅ Top 5 déclencheurs\n✅ Pas de A/K/Q/J en déclencheur\n✅ Port : 10000\n\n👨‍💻 Développeur: Sossou Kouamé\n🎟️ Code Promo: Koua229',
                     'parse_mode': 'Markdown'
                 }
                 response = requests.post(url, data=data, files=files, timeout=60)
             
             if response.json().get('ok'):
                 logger.info(f"✅ {zip_filename} envoyé avec succès")
-                self.send_message(chat_id, f"✅ **{zip_filename} envoyé avec succès!**\n\n🎯 Le bot est maintenant à jour avec les dernières corrections:\n• Mise à jour INTER toutes les 15 min\n• Prédiction ultra-rapide (immédiate)\n• Relance ❌ avec même costume\n• Vérification optimisée\n• Rapports auto à 6h, 12h, 18h, 0h")
+                self.send_message(chat_id, f"✅ **{zip_filename} envoyé avec succès!**")
             else:
                 self.send_message(chat_id, f"❌ Erreur : {response.text}")
                     
