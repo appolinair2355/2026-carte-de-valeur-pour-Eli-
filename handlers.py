@@ -526,10 +526,9 @@ class TelegramHandlers:
                     # B. Collecter et Vérifier (uniquement si le message est finalisé sans ⏰)
                     if '⏰' not in text:
                         game_num = self.card_predictor.extract_game_number(text)
-                        if game_num:
-                            # Collecte pour l'IA
-                            self.card_predictor.collect_inter_data(game_num, text)
-                        
+                          if game_num:
+                           self.card_predictor.collect_inter_data(text)  # ✅ Supprimez game_num
+
                         # Vérification du résultat
                         if self.card_predictor.has_completion_indicators(text) or '🔰' in text:
                             res = self.card_predictor._verify_prediction_common(text)
