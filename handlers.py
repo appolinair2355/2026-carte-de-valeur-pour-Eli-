@@ -473,8 +473,7 @@ class TelegramHandlers:
                 elif text.startswith('/config'):
                     kb = {'inline_keyboard': [[{'text': 'Source', 'callback_data': 'config_source'}, {'text': 'Prediction', 'callback_data': 'config_prediction'}, {'text': 'Annuler', 'callback_data': 'config_cancel'}]]}
                     self.send_message(chat_id, "⚙️ **CONFIGURATION**\nQuel est le rôle de ce canal ?", reply_markup=kb)
-                elif text.startswith('/start'):
-                    self.send_message(chat_id, WELCOME_MESSAGE)
+                elif text.startswith('/start                    self.send_message(chat_id, WELCOME_MESSAGE)
                 elif text.startswith('/stat'):
                     sid = self.card_predictor.target_channel_id or self.card_predictor.HARDCODED_SOURCE_ID or "Non défini"
                     pid = self.card_predictor.prediction_channel_id or self.card_predictor.HARDCODED_PREDICTION_ID or "Non défini"
@@ -494,7 +493,7 @@ class TelegramHandlers:
                 # Traitement Canal Source
                 elif str(chat_id) == str(self.card_predictor.target_channel_id):
                     # A. Collecter les données pour l'IA (toujours faire ça en premier)
-                    self.card_predictor.collect_inter_data(text)
+                    self.card_predictor.collect_inter_data(text)  # ✅ CORRIGÉ : 1 seul argument
 
                     # B. Vérifier si c'est un résultat pour mettre à jour une prédiction en cours
                     if self.card_predictor.is_final_result_structurally_valid(text):
@@ -521,24 +520,6 @@ class TelegramHandlers:
                             if mid:
                                 self.card_predictor.make_prediction_save_mid(num, mid)
                                 logger.info(f"🎯 Prédiction envoyée pour jeu {num}")
-                                logger.info(f"🔮 Prédiction envoyée pour jeu {num+2}")
-
-                    # B. Collecter et Vérifier (uniquement si le message est finalisé sans ⏰)
-                    if '⏰' not in text:
-                        game_num = self.card_predictor.extract_game_number(text)
-                          if game_num:
-                           self.card_predictor.collect_inter_data(text)  # ✅ Supprimez game_num
-
-                        # Vérification du résultat
-                        if self.card_predictor.has_completion_indicators(text) or '🔰' in text:
-                            res = self.card_predictor._verify_prediction_common(text)
-                            if res and res['type'] == 'edit_message':
-                                mid_to_edit = res.get('message_id_to_edit')
-                                pred_channel = self.card_predictor.prediction_channel_id
-                                if mid_to_edit and pred_channel: 
-                                    self.send_message(pred_channel, res['new_message'], message_id=mid_to_edit, edit=True)
-                    else:
-                        logger.debug(f"⏳ Message jeu {self.card_predictor.extract_game_number(text) or '?'} en cours d'édition (⏰). Prédiction tentée, vérification en attente.")
 
             # 2. Messages édités (CRITIQUE pour vérification)
             elif ('edited_message' in update and 'text' in update['edited_message']) or ('edited_channel_post' in update and 'text' in update['edited_channel_post']):
@@ -554,11 +535,11 @@ class TelegramHandlers:
                     # Collecter TOUJOURS
                     game_num = self.card_predictor.extract_game_number(text)
                     if game_num:
-                        self.card_predictor.collect_inter_data(game_num, text)
+                        self.card_predictor.collect_inter_data(text)  # ✅ CORRIGÉ : 1 seul argument
                     
                     # Vérifier UNIQUEMENT sur messages finalisés (✅ ou 🔰)
                     if self.card_predictor.has_completion_indicators(text) or '🔰' in text:
-                        res = self.card_predictor.verify_prediction_from_edit(text)
+                        res = self.card_predictor.verify_prediction(text)
                         
                         if res and res['type'] == 'edit_message':
                             mid_to_edit = res.get('message_id_to_edit')
