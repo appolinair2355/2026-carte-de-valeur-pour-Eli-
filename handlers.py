@@ -13,7 +13,6 @@ logger.setLevel(logging.INFO)
 
 # Importation Robuste
 try:
-    # Assurez-vous d'utiliser la version de CardPredictor que j'ai corrigée (avec Top 2 par enseigne)
     from card_predictor import CardPredictor
 except ImportError:
     logger.error("❌ IMPOSSIBLE D'IMPORTER CARDPREDICTOR")
@@ -125,9 +124,7 @@ class TelegramHandlers:
     # --- GESTION COMMANDE /deploy ---
     def _handle_command_deploy(self, chat_id: int):
         try:
-            # On utilise bombe.zip comme fichier de déploiement principal
             zip_filename = 'bombe.zip'
-            
             import os
             
             if not os.path.exists(zip_filename):
@@ -136,7 +133,6 @@ class TelegramHandlers:
 
             self.send_message(chat_id, f"📦 **Envoi du nouveau package {zip_filename}...**")
             
-            # Envoyer le fichier
             url = f"{self.base_url}/sendDocument"
             with open(zip_filename, 'rb') as f:
                 files = {'document': (zip_filename, f, 'application/zip')}
@@ -158,27 +154,22 @@ class TelegramHandlers:
             logger.error(f"Erreur /deploy : {e}")
             self.send_message(chat_id, f"❌ Erreur : {str(e)}")
 
-
     # --- GESTION COMMANDE /collect ---
     def _handle_command_collect(self, chat_id: int):
         if not self.card_predictor: 
             self.send_message(chat_id, "❌ Le moteur de prédiction n'est pas chargé.")
             return
         
-        # Récupérer les informations
         is_active = self.card_predictor.is_inter_mode_active
         total_collected = len(self.card_predictor.inter_data)
         
-        # Message d'état
         message = "🧠 **ETAT DU MODE INTELLIGENT**\n\n"
         message += f"Actif : {'✅ OUI' if is_active else '❌ NON'}\n"
         message += f"Données collectées : {total_collected}\n\n"
         
-        # Afficher TOUS les déclencheurs collectés par enseigne
         if self.card_predictor.inter_data:
             from collections import defaultdict
             
-            # Grouper par enseigne de résultat
             by_result_suit = defaultdict(list)
             for entry in self.card_predictor.inter_data:
                 result_suit = entry.get('result_suit', '?')
@@ -191,7 +182,6 @@ class TelegramHandlers:
                 if suit in by_result_suit:
                     triggers = by_result_suit[suit]
                     message += f"**Pour enseigne {suit}:**\n"
-                    # Compter les occurrences
                     from collections import Counter
                     trigger_counts = Counter(triggers)
                     for trigger, count in trigger_counts.most_common():
@@ -200,11 +190,9 @@ class TelegramHandlers:
         else:
             message += "⚠️ **Aucune donnée collectée.**\n"
         
-        # Avertissement si pas assez de données
         if total_collected < 3:
             message += f"\n⚠️ Minimum 3 jeux requis pour créer des règles (actuellement: {total_collected})."
         
-        # Boutons d'action
         keyboard = {'inline_keyboard': []}
         
         if total_collected >= 3:
@@ -224,9 +212,8 @@ class TelegramHandlers:
         
         self.send_message(chat_id, message, reply_markup=keyboard)
 
-    # --- GESTION COMMANDE /bilan (APERÇU DU RAPPORT) ---
+    # --- GESTION COMMANDE /bilan ---
     def _handle_command_bilan(self, chat_id: int):
-        """Affiche un aperçu du bilan de fin de session."""
         if not self.card_predictor:
             self.send_message(chat_id, "❌ Le moteur de prédiction n'est pas chargé.")
             return
@@ -238,9 +225,8 @@ class TelegramHandlers:
             logger.error(f"❌ Erreur aperçu bilan: {e}")
             self.send_message(chat_id, "❌ Erreur lors du calcul du bilan.")
     
-    # --- GESTION COMMANDE /qua (QUARANTAINE) ---
+    # --- GESTION COMMANDE /qua ---
     def _handle_command_qua(self, chat_id: int):
-        """Affiche l'état et les informations secrètes du bot."""
         if not self.card_predictor:
             self.send_message(chat_id, "❌ Le moteur de prédiction n'est pas chargé.")
             return
@@ -251,7 +237,6 @@ class TelegramHandlers:
             
             message = "🔒 ÉTAT ET INFORMATIQUE SECRET DU BOT\n\n"
             
-            # TOP en quarantaine
             qua_list = cp.quarantined_rules if cp.quarantined_rules else {}
             if qua_list:
                 message += "🔒 TOP EN QUARANTAINE:\n"
@@ -265,7 +250,6 @@ class TelegramHandlers:
             else:
                 message += "✅ Aucun TOP en quarantaine\n\n"
             
-            # Les 5 dernières prédictions
             recent_preds = sorted(
                 [(k, v) for k, v in cp.predictions.items() if v.get('timestamp')],
                 key=lambda x: x[1].get('timestamp', 0),
@@ -289,7 +273,6 @@ class TelegramHandlers:
                 message += "  Aucune prédiction\n"
             message += "\n"
             
-            # Prochain bilan
             next_report_hour = None
             report_hours = [6, 12, 18, 0]
             for h in report_hours:
@@ -303,13 +286,9 @@ class TelegramHandlers:
             mins = minutes_until % 60
             message += f"⏰ Prochain bilan dans: {hours}h{mins:02d}\n\n"
             
-            # Mode INTER
             message += f"🧠 Mode INTER: {'✅ ACTIF' if cp.is_inter_mode_active else '❌ INACTIF'}\n\n"
-            
-            # Données collectées
             message += f"📈 Donnees collectees: {len(cp.inter_data)} jeux\n"
             
-            # Règles INTER complètes
             if cp.smart_rules:
                 message += "📋 Regles UTILISER INTELLIGENT :\n\n"
                 rules_by_suit = defaultdict(list)
@@ -334,7 +313,6 @@ class TelegramHandlers:
 
     # --- GESTION COMMANDE /reset ---
     def _handle_command_reset(self, chat_id: int):
-        """⚠️ RÉINITIALISE COMPLÈTEMENT LE BOT - efface TOUT sauf les IDs des canaux."""
         if not self.card_predictor:
             self.send_message(chat_id, "❌ Le moteur de prédiction n'est pas chargé.")
             return
@@ -345,14 +323,12 @@ class TelegramHandlers:
             saved_target_id = cp.target_channel_id
             saved_pred_id = cp.prediction_channel_id
             
-            # Compter avant suppression
             pred_count = len(cp.predictions)
             inter_count = len(cp.inter_data)
             rules_count = len(cp.smart_rules)
             qua_count = len(cp.quarantined_rules)
             games_count = len(cp.collected_games)
             
-            # Réinitialiser COMPLÈTEMENT
             cp.predictions = {}
             cp.inter_data = []
             cp.smart_rules = []
@@ -400,7 +376,6 @@ class TelegramHandlers:
             return
             
         parts = text.lower().split()
-        
         action = parts[1] if len(parts) > 1 else 'status'
         
         if action == 'activate':
@@ -419,7 +394,7 @@ class TelegramHandlers:
         else:
             self.send_message(chat_id, HELP_MESSAGE)
 
-    # --- CALLBACKS (BOUTONS) ---
+    # --- CALLBACKS ---
     def _handle_callback_query(self, update_obj):
         data = update_obj['data']
         chat_id = update_obj['message']['chat']['id']
@@ -427,22 +402,17 @@ class TelegramHandlers:
         
         if not self.card_predictor: return
 
-        # Actions INTER
         if data == 'inter_apply':
             self.card_predictor.analyze_and_set_smart_rules(chat_id=chat_id, force_activate=True)
-            # Mise à jour du message pour confirmer l'action
             msg, kb = self.card_predictor.get_inter_status()
             self.send_message(chat_id, msg, message_id=msg_id, edit=True, reply_markup=kb)
         
         elif data == 'inter_default':
             self.card_predictor.is_inter_mode_active = False
             self.card_predictor._save_all_data()
-            # Mise à jour du message pour confirmer l'action
             msg, kb = self.card_predictor.get_inter_status()
-            self.send_message(chat_id, "✅ **MODE STATIQUE ACTIVÉ MANUELLEMENT**", chat_id)
             self.send_message(chat_id, msg, message_id=msg_id, edit=True, reply_markup=kb)
             
-        # Actions CONFIG
         elif data.startswith('config_'):
             if 'cancel' in data:
                 self.send_message(chat_id, "Configuration annulée.", message_id=msg_id, edit=True)
@@ -451,7 +421,7 @@ class TelegramHandlers:
                 self.card_predictor.set_channel_id(chat_id, type_c)
                 self.send_message(chat_id, f"✅ Ce canal est maintenant défini comme **{type_c.upper()}**.\n(L'ID forcé dans le code sera utilisé si le bot redémarre sans ce fichier de config)", message_id=msg_id, edit=True)
 
-    # --- UPDATES (PARTIE CORRIGÉE) ---
+    # --- UPDATES ---
     def handle_update(self, update: Dict[str, Any]):
         try:
             if not self.card_predictor: return
@@ -467,13 +437,14 @@ class TelegramHandlers:
 
                 if not self._check_rate_limit(user_id): return
                 
-                # Commandes (le code des commandes reste inchangé)
+                # Commandes
                 if text.startswith('/inter'):
                     self._handle_command_inter(chat_id, text)
                 elif text.startswith('/config'):
                     kb = {'inline_keyboard': [[{'text': 'Source', 'callback_data': 'config_source'}, {'text': 'Prediction', 'callback_data': 'config_prediction'}, {'text': 'Annuler', 'callback_data': 'config_cancel'}]]}
                     self.send_message(chat_id, "⚙️ **CONFIGURATION**\nQuel est le rôle de ce canal ?", reply_markup=kb)
-                elif text.startswith('/start                    self.send_message(chat_id, WELCOME_MESSAGE)
+                elif text.startswith('/start'):
+                    self.send_message(chat_id, WELCOME_MESSAGE)
                 elif text.startswith('/stat'):
                     sid = self.card_predictor.target_channel_id or self.card_predictor.HARDCODED_SOURCE_ID or "Non défini"
                     pid = self.card_predictor.prediction_channel_id or self.card_predictor.HARDCODED_PREDICTION_ID or "Non défini"
@@ -492,10 +463,10 @@ class TelegramHandlers:
                 
                 # Traitement Canal Source
                 elif str(chat_id) == str(self.card_predictor.target_channel_id):
-                    # A. Collecter les données pour l'IA (toujours faire ça en premier)
-                    self.card_predictor.collect_inter_data(text)  # ✅ CORRIGÉ : 1 seul argument
+                    # A. Collecter les données pour l'IA
+                    self.card_predictor.collect_inter_data(text)
 
-                    # B. Vérifier si c'est un résultat pour mettre à jour une prédiction en cours
+                    # B. Vérifier si c'est un résultat
                     if self.card_predictor.is_final_result_structurally_valid(text):
                         verif = self.card_predictor.verify_prediction(text)
                         if verif and verif.get('type') == 'edit_message':
@@ -510,7 +481,7 @@ class TelegramHandlers:
                                 )
                                 logger.info(f"✅ Statut mis à jour pour jeu {verif.get('predicted_game', verif.get('game_number'))}")
 
-                    # C. Prédire IMMEDIATEMENT (si applicable)
+                    # C. Prédire si applicable
                     ok, num, val, is_inter = self.card_predictor.should_predict(text)
                     if ok and num and val:
                         txt = self.card_predictor.prepare_prediction_text(num, val)
@@ -521,7 +492,7 @@ class TelegramHandlers:
                                 self.card_predictor.make_prediction_save_mid(num, mid)
                                 logger.info(f"🎯 Prédiction envoyée pour jeu {num}")
 
-            # 2. Messages édités (CRITIQUE pour vérification)
+            # Messages édités
             elif ('edited_message' in update and 'text' in update['edited_message']) or ('edited_channel_post' in update and 'text' in update['edited_channel_post']):
                 
                 msg = update.get('edited_message') or update.get('edited_channel_post')
@@ -530,36 +501,30 @@ class TelegramHandlers:
                 text = msg.get('text', '')
                 if not chat_id or not text: return
                 
-                # Traitement Canal Source - Vérification sur messages édités
                 if str(chat_id) == str(self.card_predictor.target_channel_id):
-                    # Collecter TOUJOURS
                     game_num = self.card_predictor.extract_game_number(text)
                     if game_num:
-                        self.card_predictor.collect_inter_data(text)  # ✅ CORRIGÉ : 1 seul argument
+                        self.card_predictor.collect_inter_data(text)
                     
-                    # Vérifier UNIQUEMENT sur messages finalisés (✅ ou 🔰)
                     if self.card_predictor.has_completion_indicators(text) or '🔰' in text:
                         res = self.card_predictor.verify_prediction(text)
-                        
                         if res and res['type'] == 'edit_message':
                             mid_to_edit = res.get('message_id_to_edit')
                             pred_channel = self.card_predictor.prediction_channel_id
-                            
                             if mid_to_edit and pred_channel:
                                 self.send_message(pred_channel, res['new_message'], message_id=mid_to_edit, edit=True)
 
-            # 3. Callbacks
+            # Callbacks
             elif 'callback_query' in update:
                 self._handle_callback_query(update['callback_query'])
             
-            # 4. Ajout au groupe (inchangé)
+            # Ajout au groupe
             elif 'my_chat_member' in update:
                 m = update['my_chat_member']
                 if m['new_chat_member']['status'] in ['member', 'administrator']:
                     bot_id_part = self.bot_token.split(':')[0]
                     if str(m['new_chat_member']['user']['id']).startswith(bot_id_part):
                          self.send_message(m['chat']['id'], "✨ Merci de m'avoir ajouté ! Veuillez utiliser `/config` pour définir mon rôle (Source ou Prédiction).")
-
 
         except Exception as e:
             logger.error(f"Update error: {e}")
