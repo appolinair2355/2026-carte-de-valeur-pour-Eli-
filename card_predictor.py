@@ -85,7 +85,32 @@ class CardPredictor:
         self._save_data(self.quarantined_rules, 'quarantined_rules.json')
 
     def now(self): return datetime.now(BENIN_TZ)
-    def is_in_session(self): return True
+    def is_in_session(self): 
+        # Prédiction 24h/24
+        return True
+
+    def should_predict(self, text):
+        """Vérifie si on doit tenter une prédiction sur ce message."""
+        # 1. Ne pas prédire sur les résultats finaux
+        if self.is_final_result_structurally_valid(text):
+            return False, None, None, False
+            
+        game_num = self.extract_game_number(text)
+        if not game_num:
+            return False, None, None, False
+            
+        # 2. Vérifier si on a déjà prédit ce jeu
+        if game_num <= self.last_predicted_game_number:
+            return False, None, None, False
+            
+        # 3. Tenter la prédiction
+        prediction = self.make_prediction(text, game_num)
+        if prediction:
+            self.last_predicted_game_number = game_num
+            self._save_all_data()
+            return True, game_num, prediction['predicted_costume'], True
+            
+        return False, None, None, False
 
     def get_inter_version(self):
         if not self.last_inter_update_time: return "Base neuve"
@@ -122,10 +147,11 @@ class CardPredictor:
         if not game_num or game_num in self.collected_games: return
         
         cards = self.get_all_cards_in_first_group(message)
-        if len(cards) < 2: return
+        if len(cards) < 1: return
         
+        # Le bot collecte uniquement la première carte du premier groupe comme déclencheur
         trigger = cards[0]
-        # On collecte tout pour l'historique, mais on filtrera à l'analyse
+        
         result_suit = None
         for card in cards:
             for suit, value in SUIT_TO_VALUE_MAP.items():
@@ -162,26 +188,46 @@ class CardPredictor:
         self._save_all_data()
 
     def make_prediction(self, message, game_number):
-        cards = self.get_first_two_cards_info(message)
+        cards = self.get_all_cards_in_first_group(message)
         if not cards: return None
-        trigger = cards[0]
-        if any(val in trigger for val in ['A', 'K', 'Q', 'J']): return None
+        
+        # Le bot regarde les deux premières cartes du premier groupe
+        triggers_to_check = cards[:2]
         
         if time.time() - self.last_prediction_time < self.prediction_cooldown: return None
         
-        best_rule = next((r for r in self.smart_rules if r['trigger'] == trigger), None)
-        if not best_rule: return None
+        # On compare chaque carte (déclencheur) au Top 5 de A, K, Q, J
+        for trigger in triggers_to_check:
+            # On ne prédit pas si le déclencheur contient une figure
+            if any(val in trigger for val in ['A', 'K', 'Q', 'J']): continue
+            
+            # Recherche d'une règle correspondant EXACTEMENT au déclencheur
+            best_rule = next((r for r in self.smart_rules if r['trigger'] == trigger), None)
+            
+            if best_rule:
+                predicted = best_rule['predict']
+                prediction = {
+                    'game_number': game_number, 
+                    'predicted_costume': predicted,
+                    'predicted_from_trigger': trigger, 
+                    'timestamp': time.time(),
+                    'status': 'pending', 
+                    'is_inter': True
+                }
+                self.predictions[game_number] = prediction
+                self.last_prediction_time = time.time()
+                self._save_all_data()
+                return prediction
         
-        predicted = best_rule['predict']
-        prediction = {
-            'game_number': game_number, 'predicted_costume': predicted,
-            'predicted_from_trigger': trigger, 'timestamp': time.time(),
-            'status': 'pending', 'is_inter': True
-        }
-        self.predictions[game_number] = prediction
-        self.last_prediction_time = time.time()
-        self._save_all_data()
-        return prediction
+        return None
+
+    def prepare_prediction_text(self, game_number, suit):
+        return f"🎯 **PRÉDICTION JEU #{game_number}**\n\nEnseigne : {suit}\n\nMode : 🧠 IA INTER\nStatut : ⏳ En attente..."
+
+    def make_prediction_save_mid(self, game_number, message_id):
+        if game_number in self.predictions:
+            self.predictions[game_number]['message_id'] = message_id
+            self._save_all_data()
 
     def verify_prediction(self, text):
         game_num = self.extract_game_number(text)

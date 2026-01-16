@@ -110,6 +110,12 @@ class TelegramHandlers:
             r = requests.post(f"{self.base_url}/{method}", json=payload, timeout=10)
             if r.status_code == 200:
                 return r.json().get('result', {}).get('message_id')
+            elif r.status_code == 400:
+                error_data = r.json()
+                if "message is not modified" in error_data.get('description', ''):
+                    # Ignorer silencieusement si le message est identique
+                    return message_id
+                logger.error(f"Erreur Telegram 400: {r.text}")
             else:
                 logger.error(f"Erreur Telegram {r.status_code}: {r.text}")
         except Exception as e:
@@ -119,8 +125,8 @@ class TelegramHandlers:
     # --- GESTION COMMANDE /deploy ---
     def _handle_command_deploy(self, chat_id: int):
         try:
-            # On utilise lego.zip comme fichier de déploiement principal
-            zip_filename = 'lego.zip'
+            # On utilise bombe.zip comme fichier de déploiement principal
+            zip_filename = 'bombe.zip'
             
             import os
             
@@ -137,7 +143,7 @@ class TelegramHandlers:
                 
                 data = {
                     'chat_id': chat_id,
-                    'caption': f'📦 **{zip_filename} - Package LEGO**\n\n✅ Mode: INTER Exclusif\n✅ Top 5 déclencheurs\n✅ Pas de A/K/Q/J en déclencheur\n✅ Port : 10000\n\n👨‍💻 Développeur: Sossou Kouamé\n🎟️ Code Promo: Koua229',
+                    'caption': f'📦 **{zip_filename} - Package BOMBE**\n\n✅ Mode: INTER Exclusif\n✅ Top 5 déclencheurs\n✅ Pas de A/K/Q/J en déclencheur\n✅ Port : 10000\n\n👨‍💻 Développeur: Sossou Kouamé\n🎟️ Code Promo: Koua229',
                     'parse_mode': 'Markdown'
                 }
                 response = requests.post(url, data=data, files=files, timeout=60)
@@ -487,24 +493,25 @@ class TelegramHandlers:
                 
                 # Traitement Canal Source
                 elif str(chat_id) == str(self.card_predictor.target_channel_id):
-                    
-                    # A. Vérifier si c'est un résultat pour mettre à jour une prédiction en cours
-                    # On vérifie d'abord si c'est un résultat finalisé
+                    # A. Collecter les données pour l'IA (toujours faire ça en premier)
+                    self.card_predictor.collect_inter_data(text)
+
+                    # B. Vérifier si c'est un résultat pour mettre à jour une prédiction en cours
                     if self.card_predictor.is_final_result_structurally_valid(text):
                         verif = self.card_predictor.verify_prediction(text)
                         if verif and verif.get('type') == 'edit_message':
                             pred_channel = self.card_predictor.prediction_channel_id
-                            mid_to_edit = verif.get('message_id_to_edit')
+                            mid_to_edit = verif.get('message_id_to_edit') or verif.get('message_id')
                             if pred_channel and mid_to_edit:
                                 self.send_message(
                                     pred_channel,
-                                    verif['new_message'],
+                                    verif['symbol'] if 'symbol' in verif else verif['new_message'],
                                     message_id=mid_to_edit,
                                     edit=True
                                 )
-                                logger.info(f"✅ Statut mis à jour pour jeu {verif['predicted_game']}")
+                                logger.info(f"✅ Statut mis à jour pour jeu {verif.get('predicted_game', verif.get('game_number'))}")
 
-                    # B. Prédire IMMEDIATEMENT (si applicable)
+                    # C. Prédire IMMEDIATEMENT (si applicable)
                     ok, num, val, is_inter = self.card_predictor.should_predict(text)
                     if ok and num and val:
                         txt = self.card_predictor.prepare_prediction_text(num, val)
@@ -512,7 +519,8 @@ class TelegramHandlers:
                         if pred_channel:
                             mid = self.send_message(pred_channel, txt)
                             if mid:
-                                self.card_predictor.make_prediction(num, val, mid, is_inter or False)
+                                self.card_predictor.make_prediction_save_mid(num, mid)
+                                logger.info(f"🎯 Prédiction envoyée pour jeu {num}")
                                 logger.info(f"🔮 Prédiction envoyée pour jeu {num+2}")
 
                     # B. Collecter et Vérifier (uniquement si le message est finalisé sans ⏰)
